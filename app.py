@@ -23,7 +23,12 @@ def moeda(v):
 # ABAS
 # =========================
 
-aba1, aba2 = st.tabs(["📊 Gestão Diária", "🚨 Registro de Evento"])
+# aba1, aba2 = st.tabs(["📊 Gestão Diária", "🚨 Registro de Evento"])
+aba1, aba2, aba3 = st.tabs([
+    "📊 Gestão Diária",
+    "🚨 Registro de Evento",
+    "📅 Agenda"
+])
 
 # =========================================================
 # =================== ABA 1 - GESTÃO =======================
@@ -182,5 +187,52 @@ with aba2:
 
         link = f"https://api.whatsapp.com/send?text={urllib.parse.quote(texto_evento)}"
 
+        st.success("✅ Clique abaixo para compartilhar")
+        st.markdown(f"[👉 Abrir WhatsApp]({link})")
+        
+# =========================================================
+# =================== ABA 3 - AGENDA =======================
+# =========================================================
+
+with aba3:
+
+    st.header("📅 Agenda de Inventários")
+
+    data_agenda = st.date_input("📆 Data", key="agenda_data")
+
+    agenda = {
+        "2026-05-05": ["Inventário Padaria / Lanchonete / Pescados"],
+        "2026-05-06": ["Auditoria de Presença - Perecíveis"],
+        "2026-05-16": ["Inventário Paletes CHEP e PBR"],
+        "2026-05-24": ["Inventário Horti (FLV)"]
+    }
+
+    atividades = agenda.get(str(data_agenda), ["Sem atividades programadas"])
+
+    st.subheader("📋 Atividades do dia")
+
+    checks = []
+    for i, item in enumerate(atividades):
+        c = st.checkbox(item, key=f"agenda_{i}")
+        checks.append((item, c))
+
+    concluido = [i for i, c in checks if c]
+    pendente = [i for i, c in checks if not c]
+
+    texto = f"""📅 AGENDA DE INVENTÁRIOS
+
+📆 Data: {data_agenda.strftime('%d/%m/%Y')}
+
+✔ CONCLUÍDO:
+{chr(10).join(concluido) if concluido else "Nenhum"}
+
+⏳ PENDENTE:
+{chr(10).join(pendente) if pendente else "Nenhum"}
+"""
+
+    st.text_area("📋 Pré-visualização", texto, height=250)
+
+    if st.button("📤 Compartilhar Agenda", key="btn_agenda"):
+        link = f"https://api.whatsapp.com/send?text={urllib.parse.quote(texto)}"
         st.success("✅ Clique abaixo para compartilhar")
         st.markdown(f"[👉 Abrir WhatsApp]({link})")
