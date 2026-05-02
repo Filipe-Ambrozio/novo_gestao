@@ -1,15 +1,47 @@
 import streamlit as st
-import urllib.parse
+import pandas as pd
 from datetime import datetime
+import requests
+import urllib.parse
 
-st.set_page_config(page_title="Gestão Loja", layout="centered")
-
-st.title("📊 Sistema de Gestão")
+st.set_page_config(page_title="Sistema Loja", layout="wide")
 
 # =========================
-# FUNÇÃO VALIDAR HORA
+# MENU LATERAL
 # =========================
+menu = st.sidebar.radio(
+    "📌 Menu",
+    [
+        "🌡️ Temperatura",
+        "📦 Paletes",
+        "📊 Dashboard",
+        "📊 Gestão Diária",
+        "🚨 Registro de Evento",
+        "📅 Agenda"
+    ]
+)
 
+# =========================
+# CONFIG
+# =========================
+URL = "https://script.google.com/macros/s/AKfycbz8wNjzEAD8u_3vzqkEdF4CK0ArnWpX4cYtX8mJwneAK2Oj39i_Ks4hjDHCsWIzNSxKJw/exec"
+
+# nomes = ["Luiz Cláudio", "Filipe Ambrozio", "Outro"]
+nomes = ["Luiz Claudio", "Filipe Ambrozio", "Lucia", "Gennif Santana", "Jhonattan",	"Gernan", "Giovane", "Anderson", "Kesia", "Janaina Fernandes", "Sérgio Medeiros", "Josenildo Jose", "Roni Vicente", "Erick", "Daniel", "Angelo", "Alberto"]
+
+
+# =========================
+# SESSION STATE
+# =========================
+if "temp" not in st.session_state:
+    st.session_state.temp = []
+
+if "palete" not in st.session_state:
+    st.session_state.palete = []
+
+# =========================
+# FUNÇÕES (FORA DOS IFs)
+# =========================
 def validar_hora(hora_str):
     try:
         return datetime.strptime(hora_str, "%H:%M").time()
@@ -19,220 +51,333 @@ def validar_hora(hora_str):
 def moeda(v):
     return f"{v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
-# =========================
-# ABAS
-# =========================
+def campo_valor(label, key):
+    v = st.number_input(label, value=0.0, key=key)
+    if v < 0:
+        st.markdown("<span style='color:red'>🔴 Valor negativo</span>", unsafe_allow_html=True)
+    return v
 
-# aba1, aba2 = st.tabs(["📊 Gestão Diária", "🚨 Registro de Evento"])
-aba1, aba2, aba3 = st.tabs([
-    "📊 Gestão Diária",
-    "🚨 Registro de Evento",
-    "📅 Agenda"
-])
 
-# =========================================================
-# =================== ABA 1 - GESTÃO =======================
-# =========================================================
+# =====================================================
+# 🌡️ TEMPERATURA
+# =====================================================
+if menu == "🌡️ Temperatura":
 
-with aba1:
+    st.title("🌡️ Controle de Temperatura")
 
-    st.header("📊 Gestão Diária")
+    nome = st.selectbox("Responsável", nomes)
+    local = st.selectbox("Local", ["Freezer 1", "Freezer 2", "Geladeira 1", "Geladeira 2"])
 
-    loja = st.text_input("🚟 Loja", "10 - São Lourenço", key="loja")
+    data_hora = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+    st.info(data_hora)
 
-    data = st.date_input("📆 Data", value=datetime.now(), key="data_gestao")
+    # =========================
+    # FORM (resolve o problema)
+    # =========================
+    with st.form("form_temp", clear_on_submit=True):
 
-    hora_str = st.text_input("⏰ Horário", datetime.now().strftime("%H:%M"), key="hora_gestao")
-    hora = validar_hora(hora_str)
+        area = st.selectbox("Área", ["Área 1", "Área 2", "Área 3"])
+        temperatura = st.number_input("Temperatura (°C)", step=0.1)
+        status = st.text_input("Status / Observação")
 
-    if not hora:
-        st.warning("Formato de hora inválido (HH:MM)")
+        submitted = st.form_submit_button("Adicionar")
 
-    responsaveis = [
-        "Luiz Cláudio - GS Prevenção",
-        "Filipe Ambrozio - Ass - P.P",
-    ]
+        if submitted:
+            st.session_state.temp.append({
+                "tipo_registro": "temperatura",
+                "data_hora": data_hora,
+                "nome": nome,
+                "local": local,
+                "area": area,
+                "temperatura": temperatura,
+                "status": status
+            })
 
-    responsavel = st.selectbox("👤 Responsável", responsaveis, key="resp")
+            st.success("Adicionado!")
 
-    if st.checkbox("Digitar outro responsável", key="check_resp"):
-        responsavel = st.text_input("Digite o nome do responsável", key="resp_outro")
+    # =========================
+    # LISTA
+    # =========================
+    st.subheader("📋 Lista")
+
+    for i, r in enumerate(st.session_state.temp):
+        col1, col2, col3, col4, col5, col6 = st.columns([2,2,2,2,2,1])
+
+        col1.write(r["local"])
+        col2.write(r["area"])
+        col3.write(f'{r["temperatura"]} °C')
+        col4.write(r["status"])
+        col5.write(r["nome"])
+
+        if col6.button("❌", key=f"t{i}"):
+            st.session_state.temp.pop(i)
+            st.rerun()
+
+    # =========================
+    # SALVAR
+    # =========================
+    if st.button("💾 Salvar"):
+        for r in st.session_state.temp:
+            requests.post(URL, json=r)
+
+        st.success("Salvo!")
+        st.session_state.temp = []
+        st.rerun()
+
+
+# =====================================================
+# 📦 PALETES
+# =====================================================
+elif menu == "📦 Paletes":
+
+    st.title("📦 Contagem de Paletes")
+
+    nome = st.selectbox("Responsável", nomes)
+    tipo = st.selectbox("Tipo", ["CHEP", "Normal"])
+    local = st.selectbox("Local", ["Loja", "Depósito"])
+    quantidade = st.number_input("Quantidade", min_value=0)
+
+    data_hora = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+    st.info(data_hora)
+
+    if st.button("Adicionar"):
+        st.session_state.palete.append({
+            "tipo_registro": "palete",
+            "data_hora": data_hora,
+            "nome": nome,
+            "tipo": tipo,
+            "local": local,
+            "quantidade": quantidade
+        })
+        st.success("Adicionado!")
+        st.rerun()
+
+    st.subheader("📋 Lista")
+
+    for i, r in enumerate(st.session_state.palete):
+        col1, col2, col3, col4, col5 = st.columns([2,2,2,2,1])
+
+        col1.write(r["tipo"])
+        col2.write(r["local"])
+        col3.write(r["quantidade"])
+        col4.write(r["nome"])
+
+        if col5.button("❌", key=f"p{i}"):
+            st.session_state.palete.pop(i)
+            st.rerun()
+
+    if st.button("💾 Salvar"):
+        for r in st.session_state.palete:
+            requests.post(URL, json=r)
+
+        st.success("Salvo!")
+        st.session_state.palete = []
+        st.rerun()
+
+
+# =====================================================
+# 📊 DASHBOARD
+# =====================================================
+elif menu == "📊 Dashboard":
+
+    st.title("📊 Dashboard")
+    st.info("Conecte com a planilha futuramente")
+
+
+# =====================================================
+# 📊 GESTÃO DIÁRIA
+# =====================================================
+elif menu == "📊 Gestão Diária":
+
+    st.title("🧾 Gestão Diária")
+
+    # =========================
+    # FUNÇÕES
+    # =========================
+    def moeda(v):
+        return f"{abs(v):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+    def formatar_valor(v):
+        if v > 0:
+            return f"+R$ {moeda(v)}"
+        elif v < 0:
+            return f"-R$ {moeda(v)}"
+        else:
+            return f"R$ {moeda(v)}"
+
+    def campo_valor(label, key):
+        v = st.number_input(label, value=0.0, key=key)
+        if v < 0:
+            st.markdown("<span style='color:red'>🔴 Valor negativo</span>", unsafe_allow_html=True)
+        return v
+
+    # =========================
+    # CAMPOS
+    # =========================
+    loja = st.text_input("🚟 Loja", "10 - São Lourenço")
+    data = st.date_input("📆 Data", value=datetime.now())
+    hora = st.text_input("⏰ Horário", datetime.now().strftime("%H:%M"))
+    
+
+    # responsavel = st.text_input(
+    #     "👤 Responsável",
+    #     "Filipe Ambrozio - Assistente Prevenção"
+    # )
+    nomes = [
+    "Filipe Ambrozio - Assistente Prevenção",
+    "Luiz Cláudio - GS Prevenção",
+    "Fiscal",
+]
+
+    responsavel = st.selectbox("👤 Responsável", nomes)
+    
+
+
+    st.divider()
 
     st.subheader("📌 Vendas")
-    venda_mes = st.number_input("Venda Acumulada (R$)", value=0.0, key="venda")
-    atingimento = st.number_input("Atingimento (%)", value=0.0, key="ating")
+    venda = campo_valor("Venda Acumulada", "venda")
+    ating = st.number_input("Atingimento (%)", value=0.0)
 
-    estoque_geral = st.number_input("Estoque Geral (R$)", value=0.0, key="estoque")
+    estoque = campo_valor("Estoque Geral", "estoque")
 
     st.subheader("⚠️ Quebras")
-    quebra_pi = st.number_input("Quebra PI", value=0.0, key="pi")
-    quebra_pni = st.number_input("Quebra PNI", value=0.0, key="pni")
-    quebra_total = st.number_input("Quebra Total", value=0.0, key="total")
+    pi = campo_valor("Quebra PI", "pi")
+    pni = campo_valor("Quebra PNI", "pni")
+    total = campo_valor("Quebra Total", "total")
 
     st.subheader("💰 Financeiro")
-    contratos = st.number_input("Contratos", value=0.0, key="contratos")
-    acordos = st.number_input("Acordos", value=0.0, key="acordos")
-    receitas = st.number_input("Receitas", value=0.0, key="receitas")
-    reversao = st.number_input("Reversão (R$)", value=0.0, key="reversao")
+    contratos = campo_valor("Contratos", "contratos")
+    acordos = campo_valor("Acordos", "acordos")
+    receitas = campo_valor("Receitas", "receitas")
+    reversao = campo_valor("Reversão", "reversao")
 
     st.subheader("📊 Resultado")
-    quebra_final = st.number_input("Quebra Final", value=0.0, key="qfinal")
-    quebra_meta = st.number_input("Quebra Meta (%)", value=0.0, key="qmeta")
-    quebra_realizada = st.number_input("Quebra Realizada (%)", value=0.0, key="qreal")
+    qfinal = campo_valor("Quebra Final", "qfinal")
+    qmeta = st.number_input("Quebra Meta (%)", value=0.0)
+    qreal = st.number_input("Quebra Real (%)", value=0.0)
 
-    estoque_troca = st.number_input("Estoque Troca", value=0.0, key="troca")
-    estoque_t30 = st.number_input("Estoque +30", value=0.0, key="t30")
+    troca = campo_valor("Estoque Troca", "troca")
+    t30 = campo_valor("Estoque T +30", "t30")
 
     # =========================
-    # PRÉ-VISUALIZAÇÃO
+    # TEXTO FINAL PADRÃO
     # =========================
-
-    hora_final = hora.strftime('%H:%M') if hora else hora_str
-
-    texto = f"""GESTÃO DIÁRIA
+    texto = f"""🧾 GESTÃO DIÁRIA
 
 🚟 Loja: {loja}
 📆 Data: {data.strftime('%d/%m/%Y')}
-⏰ Horário: {hora_final}
+⏰ Horário: {hora}h
 
-👤 Responsável:
-{responsavel}
+👤 Responsável: {responsavel}
 
-📌 Venda Acumulada Mês
-R$: {moeda(venda_mes)}
+📌 Venda Acumulada Mês:
+R$ {moeda(venda)}
+Atingimento da meta de venda {ating:.0f}%
 
-Atingimento da meta de venda {atingimento:.0f}%
+Estoque Geral Loja R$ {moeda(estoque)}
 
-Estoque Geral Loja
-R$: {moeda(estoque_geral)}
+Quebra PI: {formatar_valor(pi)}
+Quebra PNI: {formatar_valor(pni)}
+Quebra Total: {formatar_valor(total)}
 
-Quebra PI R$: {moeda(quebra_pi)}
-Quebra PNI R$: {moeda(quebra_pni)}
-Quebra Total R$: {moeda(quebra_total)}
+Contratos: {formatar_valor(contratos)}
+Acordos: {formatar_valor(acordos)}
+Receitas: {formatar_valor(receitas)}
+Reversão: {formatar_valor(reversao)}
 
-Contratos R$: {moeda(contratos)}
-Acordos R$: {moeda(acordos)}
-Receitas R$: {moeda(receitas)}
-Reversão R$: {moeda(reversao)}
+Quebra Final: {formatar_valor(qfinal)}
+Quebra Meta: {qmeta:.2f}%
+Quebra Real: {qreal:.2f}%
 
-Quebra Final R$: {moeda(quebra_final)}
-Quebra Meta {quebra_meta:.2f}%
-Quebra Realizada {quebra_realizada:.2f}%
-
-Estoque Troca R$: {moeda(estoque_troca)}
-Estoque T +30 R$: {moeda(estoque_t30)}
+Estoque Troca: R$ {moeda(troca)}
+Estoque T +30: R$ {moeda(t30)}
 """
 
-    st.text_area("📋 Pré-visualização", texto, height=300)
+    # =========================
+    # PRÉVIA
+    # =========================
+    st.text_area("📋 Pré-visualização", texto, height=400)
 
-    if st.button("📤 Compartilhar Gestão", key="btn_gestao"):
-
+    # =========================
+    # WHATSAPP
+    # =========================
+    if st.button("📤 Compartilhar Gestão"):
         link = f"https://api.whatsapp.com/send?text={urllib.parse.quote(texto)}"
-
-        st.success("✅ Clique abaixo para compartilhar")
+        st.success("Clique abaixo para enviar")
         st.markdown(f"[👉 Abrir WhatsApp]({link})")
 
 
-# =========================================================
-# =================== ABA 2 - EVENTO =======================
-# =========================================================
+# =====================================================
+# 🚨 EVENTO
+# =====================================================
+elif menu == "🚨 Registro de Evento":
 
-with aba2:
+    st.title("🚨 Evento")
 
-    st.header("🚨 Registro de Evento")
+    data = st.date_input("Data", value=datetime.now())
+    hora = st.text_input("Hora", datetime.now().strftime("%H:%M"))
 
-    data_evento = st.date_input("📆 Data", value=datetime.now(), key="data_evento")
+    tipo = st.text_input("Tipo")
+    local = st.text_input("Local")
 
-    hora_str_evento = st.text_input("⏰ Horário", datetime.now().strftime("%H:%M"), key="hora_evento")
-    hora_evento = validar_hora(hora_str_evento)
+    ocorrencia = st.text_area("Ocorrência")
+    providencias = st.text_area("Providências")
 
-    if not hora_evento:
-        st.warning("Formato inválido (HH:MM)")
+    texto = f"""REGISTRO DE EVENTO
 
-    tipo = st.text_input("🚨 Tipo", key="tipo")
-    filial = st.text_input("🏫 Filial", "São Lourenço", key="filial")
-    local = st.text_input("📍 Local", key="local")
+📆 {data.strftime('%d/%m/%y')}
+⏰ {hora}
 
-    st.subheader("📝 Ocorrência")
-    ocorrencia = st.text_area("", height=200, key="ocorrencia")
+🚨 {tipo}
+📍 {local}
 
-    st.subheader("📌 Providências")
-    providencias = st.text_area("", height=150, key="providencias")
+📝 {ocorrencia}
 
-    # =========================
-    # PRÉ-VISUALIZAÇÃO
-    # =========================
-
-    hora_final = hora_evento.strftime('%H:%M') if hora_evento else hora_str_evento
-
-    texto_evento = f"""REGISTRO DE EVENTO
-
-📆 Data: {data_evento.strftime('%d/%m/%y')}
-⏰ Horário: {hora_final}
-
-🚨 Tipo: {tipo}
-🏫 Filial: {filial}
-📍 Local: {local}
-
-📝 *DISCRIMINAÇÃO DA OCORRÊNCIA*
-{ocorrencia}
-
-📌 *PROVIDÊNCIAS TOMADAS*
-{providencias}
+📌 {providencias}
 """
 
-    st.text_area("📋 Pré-visualização", texto_evento, height=300)
+    st.text_area("Prévia", texto, height=250)
 
-    if st.button("📤 Compartilhar Evento", key="btn_evento"):
+    if st.button("📤 Compartilhar Evento"):
+        link = f"https://api.whatsapp.com/send?text={urllib.parse.quote(texto)}"
+        st.markdown(f"[👉 WhatsApp]({link})")
 
-        link = f"https://api.whatsapp.com/send?text={urllib.parse.quote(texto_evento)}"
 
-        st.success("✅ Clique abaixo para compartilhar")
-        st.markdown(f"[👉 Abrir WhatsApp]({link})")
-        
-# =========================================================
-# =================== ABA 3 - AGENDA =======================
-# =========================================================
+# =====================================================
+# 📅 AGENDA
+# =====================================================
+elif menu == "📅 Agenda":
 
-with aba3:
+    st.title("📅 Agenda")
 
-    st.header("📅 Agenda de Inventários")
-
-    data_agenda = st.date_input("📆 Data", key="agenda_data")
+    data = st.date_input("Data")
 
     agenda = {
-        "2026-05-05": ["Inventário Padaria / Lanchonete / Pescados"],
-        "2026-05-06": ["Auditoria de Presença - Perecíveis"],
-        "2026-05-16": ["Inventário Paletes CHEP e PBR"],
-        "2026-05-24": ["Inventário Horti (FLV)"]
+        "2026-05-04": ["Contagem FLV"],
+        "2026-05-05": ["Inventário Padaria"],
     }
 
-    atividades = agenda.get(str(data_agenda), ["Sem atividades programadas"])
-
-    st.subheader("📋 Atividades do dia")
+    atividades = agenda.get(str(data), ["Sem atividades"])
 
     checks = []
-    for i, item in enumerate(atividades):
-        c = st.checkbox(item, key=f"agenda_{i}")
-        checks.append((item, c))
+    for i, a in enumerate(atividades):
+        c = st.checkbox(a)
+        checks.append((a, c))
 
-    concluido = [i for i, c in checks if c]
-    pendente = [i for i, c in checks if not c]
+    concluido = [a for a, c in checks if c]
+    pendente = [a for a, c in checks if not c]
 
-    texto = f"""📅 AGENDA DE INVENTÁRIOS
+    texto = f"""AGENDA
 
-📆 Data: {data_agenda.strftime('%d/%m/%Y')}
+📆 {data.strftime('%d/%m/%Y')}
 
-✔ CONCLUÍDO:
-{chr(10).join(concluido) if concluido else "Nenhum"}
-
-⏳ PENDENTE:
-{chr(10).join(pendente) if pendente else "Nenhum"}
+✔ {', '.join(concluido)}
+⏳ {', '.join(pendente)}
 """
 
-    st.text_area("📋 Pré-visualização", texto, height=250)
+    st.text_area("Prévia", texto, height=200)
 
-    if st.button("📤 Compartilhar Agenda", key="btn_agenda"):
+    if st.button("📤 Compartilhar Agenda"):
         link = f"https://api.whatsapp.com/send?text={urllib.parse.quote(texto)}"
-        st.success("✅ Clique abaixo para compartilhar")
-        st.markdown(f"[👉 Abrir WhatsApp]({link})")
+        st.markdown(f"[👉 WhatsApp]({link})")
