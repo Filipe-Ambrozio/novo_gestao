@@ -195,7 +195,7 @@ def render(URL):
             st.dataframe(
                 df_display,
                 use_container_width=True,
-                height=None
+                height="auto"
             )
             
             # Gráficos por mês
