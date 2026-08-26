@@ -1,0 +1,202 @@
+═══════════════════════════════════════════════════════════════════════════════
+    INSTRUÇÕES PARA ATUALIZAR O GOOGLE APPS SCRIPT
+═══════════════════════════════════════════════════════════════════════════════
+
+⚠️  O Dashboard não está funcionando porque o Google Apps Script não reconhece
+    o parâmetro "tipo_registro=dados". 
+
+    SOLUÇÃO: Você precisa atualizar o script.
+
+═══════════════════════════════════════════════════════════════════════════════
+PASSO A PASSO:
+═══════════════════════════════════════════════════════════════════════════════
+
+1. Abra sua planilha do Google Sheets: 
+   https://docs.google.com/spreadsheets/...
+
+2. Clique em "Extensions" (Extensões) → "Apps Script"
+
+3. LIMPE todo o código existente e COPIE E COLE o código abaixo:
+
+═══════════════════════════════════════════════════════════════════════════════
+
+function doGet(e) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var tipo = e.parameter.tipo_registro;
+
+  if (tipo === 'agenda') {
+    return ContentService
+      .createTextOutput(JSON.stringify(readAgenda(ss)))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  if (tipo === 'dados') {
+    return ContentService
+      .createTextOutput(JSON.stringify(readDados(ss)))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  return ContentService
+    .createTextOutput(JSON.stringify({ error: 'tipo_registro inválido ou não informado' }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function doPost(e) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var data = JSON.parse(e.postData.contents);
+
+  if (data.tipo_registro === 'temperatura') {
+    var sheet = ss.getSheetByName('temperatura');
+    sheet.appendRow([
+      data.data_hora,
+      data.nome,
+      data.local,
+      data.area,
+      data.temperatura,
+      data.status,
+    ]);
+  }
+
+  if (data.tipo_registro === 'palete') {
+    var sheet = ss.getSheetByName('palete');
+    sheet.appendRow([
+      data.data_hora,
+      data.nome,
+      data.tipo,
+      data.local,
+      data.quantidade,
+    ]);
+  }
+
+  if (data.tipo_registro === 'agenda') {
+    var sheet = ss.getSheetByName('agenda');
+    sheet.appendRow([
+      data.data,
+      data.evento,
+      data.status || 'Aberto',
+      data.observacao || '',
+    ]);
+  }
+
+  if (data.tipo_registro === 'agenda_status') {
+    updateAgendaStatus(ss, data.id, data.status || 'Finalizado');
+  }
+
+  return ContentService.createTextOutput('OK');
+}
+
+function readAgenda(ss) {
+  var sheet = ss.getSheetByName('agenda');
+  if (!sheet) {
+    return [];
+  }
+
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) {
+    return [];
+  }
+
+  var displayValues = sheet.getRange(2, 1, lastRow - 1, 4).getDisplayValues();
+  var events = [];
+
+  for (var i = 0; i < displayValues.length; i++) {
+    var row = displayValues[i];
+    var rowIndex = i + 2;
+    var dateString = String(row[0] || '');
+
+    events.push({
+      id: rowIndex,
+      data: dateString,
+      evento: String(row[1] || ''),
+      status: String(row[2] || 'Aberto'),
+      observacao: String(row[3] || ''),
+    });
+  }
+
+  return events;
+}
+
+function updateAgendaStatus(ss, rowId, status) {
+  var sheet = ss.getSheetByName('agenda');
+  if (!sheet) {
+    return;
+  }
+
+  var row = parseInt(rowId, 10);
+  if (isNaN(row) || row < 2) {
+    return;
+  }
+
+  sheet.getRange(row, 3).setValue(status);
+}
+
+function readDados(ss) {
+  var sheetNames = ['novo_dados', 'dados', 'Dados', 'Novo_dados'];
+  var sheet = null;
+  
+  for (var i = 0; i < sheetNames.length; i++) {
+    sheet = ss.getSheetByName(sheetNames[i]);
+    if (sheet) {
+      break;
+    }
+  }
+  
+  if (!sheet) {
+    return { error: 'Aba "novo_dados" ou "dados" não encontrada. Abas disponíveis: ' + ss.getSheets().map(function(s) { return s.getName(); }).join(', ') };
+  }
+
+  var lastRow = sheet.getLastRow();
+  var lastCol = sheet.getLastColumn();
+  
+  if (lastRow < 2) {
+    return { error: 'Aba vazia ou sem dados (apenas cabeçalhos)' };
+  }
+
+  try {
+    var headers = sheet.getRange(1, 1, 1, lastCol).getDisplayValues()[0];
+    var values = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
+    var data = [];
+
+    for (var i = 0; i < values.length; i++) {
+      var row = values[i];
+      var obj = {};
+      for (var j = 0; j < headers.length; j++) {
+        obj[headers[j]] = row[j];
+      }
+      data.push(obj);
+    }
+
+    return data;
+  } catch (error) {
+    return { error: 'Erro ao ler aba: ' + error.toString() };
+  }
+}
+
+═══════════════════════════════════════════════════════════════════════════════
+
+4. Clique no botão "Deploy" (ou "Implementar")
+
+5. Selecione "New Deployment" (Nova Implementação)
+
+6. Escolha o tipo: "Web app"
+
+7. Configure:
+   - Execute as: [Sua conta de email]
+   - Who has access: Anyone
+
+8. Clique "Deploy"
+
+9. Copie a URL gerada (a que aparece com "https://script.google.com/...")
+
+10. IMPORTANTE: Se já tiver uma URL anterior, você pode:
+    - Opção A: Usar a nova URL e atualizar em app.py
+    - Opção B: Ir em "Manage deployments" e atualizar a existente
+
+═══════════════════════════════════════════════════════════════════════════════
+
+✅ Depois de fazer isso, recarregue a aplicação Streamlit (F5 ou reinicie)
+   e o Dashboard deve funcionar!
+
+Se ainda tiver erro, me avise a mensagem exata que aparece.
+
+═══════════════════════════════════════════════════════════════════════════════
