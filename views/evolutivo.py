@@ -78,40 +78,56 @@ def render(url):
         st.info("Não há registros válidos para exibir.")
         return
 
-    setores = sorted(df["setor"].unique().tolist())
     anos = sorted(df["ano"].unique().tolist(), reverse=True)
-    anos_selecionados = st.multiselect("Anos para comparar", anos, default=anos)
-    if not anos_selecionados:
-        st.info("Selecione pelo menos um ano.")
-        return
     mes_atual = MESES[datetime.now().month - 1]
-    mes_selecionado = st.selectbox(
-        "Mês para somar todos os setores",
-        MESES,
-        index=MESES.index(mes_atual),
-    )
-    setor = st.selectbox("Setor para visualizar a evolução", setores)
+    col_periodo_1, col_periodo_2 = st.columns(2)
+    with col_periodo_1:
+        ano_1 = st.selectbox("Ano do mês principal", anos, key="evolutivo_ano_1")
+        mes_1 = st.selectbox("Mês principal", MESES, index=MESES.index(mes_atual), key="evolutivo_mes_1")
+    with col_periodo_2:
+        ano_2 = st.selectbox("Ano para comparação", anos, key="evolutivo_ano_2")
+        mes_2 = st.selectbox("Mês para comparação", MESES, index=(MESES.index(mes_atual) - 1) % 12, key="evolutivo_mes_2")
 
-    filtrado = df[df["setor"].eq(setor) & df["ano"].isin(anos_selecionados)].copy()
-    total_mes_todos_setores = df[
-        df["ano"].isin(anos_selecionados) & df["mes_nome"].eq(mes_selecionado)
-    ]["quebra"].sum()
+    setores = sorted(df["setor"].unique().tolist())
+    periodo_1 = df[df["ano"].eq(ano_1) & df["mes_nome"].eq(mes_1)]
+    periodo_2 = df[df["ano"].eq(ano_2) & df["mes_nome"].eq(mes_2)]
+    tabela_setores = pd.DataFrame({"Setor": setores})
+    valores_1 = periodo_1.groupby("setor")["quebra"].sum()
+    valores_2 = periodo_2.groupby("setor")["quebra"].sum()
+    tabela_setores["quebra_principal"] = tabela_setores["Setor"].map(valores_1).fillna(0)
+    tabela_setores["quebra_comparacao"] = tabela_setores["Setor"].map(valores_2).fillna(0)
+    tabela_setores["variação"] = tabela_setores["quebra_principal"] - tabela_setores["quebra_comparacao"]
+
+    total_principal = tabela_setores["quebra_principal"].sum()
+    total_comparacao = tabela_setores["quebra_comparacao"].sum()
+    variacao_total = tabela_setores["variação"].sum()
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric(f"Total {mes_1}/{ano_1}", f"R$ {total_principal:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+    col2.metric(f"Total {mes_2}/{ano_2}", f"R$ {total_comparacao:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+    col3.metric("Variação total", f"R$ {variacao_total:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+    col4.metric("Setores exibidos", len(setores))
+
+    st.subheader("Quebra por setor")
+    tabela_exibicao = tabela_setores.rename(columns={
+        "quebra_principal": f"Quebra {mes_1}/{ano_1}",
+        "quebra_comparacao": f"Quebra {mes_2}/{ano_2}",
+        "variação": "Variação",
+    })
+    st.dataframe(
+        tabela_exibicao.style.format({
+            f"Quebra {mes_1}/{ano_1}": "R$ {:,.2f}",
+            f"Quebra {mes_2}/{ano_2}": "R$ {:,.2f}",
+            "Variação": "R$ {:,.2f}",
+        }),
+        use_container_width=True,
+        hide_index=True,
+    )
+
+    setor = st.selectbox("Setor para visualizar a evolução mensal", setores)
+    filtrado = df[df["setor"].eq(setor) & df["ano"].isin([ano_1, ano_2])].copy()
     resumo = filtrado.groupby(["ano", "mes_nome"], as_index=False)["quebra"].sum()
     resumo["mes_nome"] = pd.Categorical(resumo["mes_nome"], categories=MESES, ordered=True)
     resumo = resumo.sort_values(["ano", "mes_nome"])
-
-    total = resumo["quebra"].sum()
-    media_mensal = resumo.groupby("mes_nome", observed=False)["quebra"].sum().mean()
-    maior_mes = resumo.loc[resumo["quebra"].abs().idxmax(), "mes_nome"] if not resumo.empty else "-"
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Quebra no período", f"R$ {total:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
-    col2.metric("Média mensal", f"R$ {media_mensal:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
-    col3.metric("Mês de maior quebra", maior_mes)
-    col4.metric(
-        f"{mes_selecionado} - todos os setores",
-        f"R$ {total_mes_todos_setores:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."),
-    )
-
     grafico = px.line(
         resumo,
         x="mes_nome",
